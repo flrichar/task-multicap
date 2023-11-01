@@ -14,7 +14,8 @@ This is a small mvp for a issue I had, we needed a way to see, in real-time tcpd
 ### Usage
 * Create a `.env` file with a regex of the pod/deployment in question, ie `SUSE`, `arch`, `some-app`,
   ... Example: `PODNAME=arch`
-* Function `cri-name` and `nerd-name` creates a new dotenv environment file `.cids-env`
+* Function `cri-name` and `nerd-name` creates a new dotenv environment file `.cids-env` with container-id
+* Function `cri-inspect` and `nerd-inspect` appends to the cids-env environment with the process-id of the container-id
 * Must run as root
 
 ### TODO
