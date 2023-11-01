@@ -1,0 +1,99 @@
+version: '3'
+dotenv: [ '.env' ]
+
+tasks: 
+         
+  cri-name:
+    deps: 
+      - task: ctl-bin
+        vars: 
+          CTLBIN: "/var/lib/rancher/rke2/bin/crictl"
+          FLAGS: "--runtime-endpoint=unix:////var/run/k3s/containerd/containerd.sock"
+          OPTIONS: "ps --name $PODNAME -q"
+    cmds:
+      - task: cat-cidsenv
+
+  nerd-name:
+    deps:
+      - task: ctl-bin
+        vars:
+          CTLBIN: "/usr/local/bin/nerdctl"
+          FLAGS: "-a /run/k3s/containerd/containerd.sock -n k8s.io"
+          OPTIONS: "ps -f name=$PODNAME -q"
+    cmds:
+      - task: cat-cidsenv
+
+  cri-inspect:
+    dotenv: [ '.cids-env' ]
+    cmds:
+     - |
+       {{.CTLBIN}} {{.FLAGS}} inspect -o go-template --template=\{\{.info.pid\}\} $CID0 |& xargs -I {} printf 'PID0=%s\n' {} |& tee -a .cids-env
+    vars:
+      CTLBIN: "/var/lib/rancher/rke2/bin/crictl"
+      FLAGS: "--runtime-endpoint=unix:////var/run/k3s/containerd/containerd.sock"
+      ##OPTIONS: "inspect $CID0"
+
+  nerd-inspect:
+    dotenv: [ '.cids-env' ]
+    cmds:
+     - |
+       {{.CTLBIN}} {{.FLAGS}} inspect -f \{\{.State.Pid\}\} $CID0 |& xargs -I {} printf 'PID0=%s\n' {} |& tee -a .cids-env
+    vars:
+      CTLBIN: "/usr/local/bin/nerdctl"
+      FLAGS: "-a /run/k3s/containerd/containerd.sock -n k8s.io"
+      ##OPTIONS: "inspect $CID0"
+
+  cap-eth0:
+    deps: 
+      - task: do-it
+        vars:
+          CTLBIN: "nsenter"
+          FLAGS: "-n -t $PID0"
+          OPTIONS: "tcpdump -Z root -n -i eth0 -c1000"
+
+  cap-net1:
+    deps: 
+      - task: do-it
+        vars:
+          CTLBIN: "nsenter"
+          FLAGS: "-n -t $PID0"
+          OPTIONS: "tcpdump -Z root -n -i net1 -c1000"
+
+  cap-all:
+    deps:
+      - task: cap-eth0
+      - task: cap-net1
+
+  do-it:
+    dotenv: [ '.cids-env' ]
+    internal: true
+    cmds: 
+     - |
+       {{.CTLBIN}} {{.FLAGS}} {{.OPTIONS}}
+
+  ctl-bin:
+    internal: true
+    cmds: 
+     - |
+       {{.CTLBIN}} {{.FLAGS}} {{.OPTIONS}} |& tee _cid-output.txt
+
+  cat-cidsenv:
+    internal: true
+    vars:
+      RESULT:
+        sh: echo $(tail -1 _cid-output.txt)
+    cmds: 
+      - |
+        echo {{.RESULT}}
+        cat << EOF > .cids-env
+        {{range $i, $line := .RESULT | splitLines -}}
+        {{printf "CID%1d" $i}}={{$line}}
+        {{end}}EOF
+
+  echo-cidsenv:
+    dotenv: [ '.cids-env' ]
+    internal: true
+    cmds: 
+      - echo $CID0
+      - echo $PID0
+
